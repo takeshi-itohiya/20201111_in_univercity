@@ -1,0 +1,170 @@
+//文字コードはshift-JIS
+#include <stdio.h>//入出力
+#include<complex.h> // 複素数  複素数単位はIとなる。
+#include<stdlib.h>//ランダム
+#include<math.h>//三角関数
+
+#define PI 3.14159265359//円周率
+
+int main(void) {//メイン関数
+	//評価する特性1
+	//変数の定義
+	const int N = 2;//N=2 波数 2
+	const double ramda = 0.15;//波長0.15[m] 周波数2GHZ
+	const double delta_d = ramda / 10; //dのサンプリング間隔  波長/
+	//const double delta_d = ramda / 20; //dのサンプリング間隔 波長 ramda/20
+	//const double d_max = 10 * ramda;// dの最大値  最大距離(波形を読み取るときに使う)
+	const double d_max = 1000 * ramda;// dの最大値  最大距離
+	const int d_number_max = d_max / delta_d; //dのサンプリング数
+	int n = 0;//ｄのサンプリング番号  電界強度とを E[n] P[n]と表現
+	double d = 0;// 距離
+	double complex E[d_number_max];//電界強度は複素関数
+	double  P[d_number_max];//電力
+	double theta=0,phi[N];//theta は波が到来する角度、phiは波の位相（ランダム）
+	FILE *fp1;
+//ファイルポインタ ファイルの書き込みに使用 (fp1は評価する特性１に、fp2は評価する特性２にfp３は評価する特性３に使う。)
+ //評価する特性２の変数
+	const int m_max=100;//課題２で使う。確率密度関数における分割数
+	int m;//確立変数の区間の番号 電力のログに相当
+	double CDF[m_max];//電力に関する累積確率変数
+	double PDF[m_max];//確立密度関数 CDFはこれの積分
+	//double delta_P;//サンプリング間隔
+	double max_log_Power;//電力の対数の最大値
+	FILE *fp2;//ファイルポインタ 　評価する特性２のファイルの書き込みに使用
+//評価する特性３の変数
+	int l;//自己相関のループで用いる。
+	double average_P=0;//Pの平均
+	double rho[d_number_max];//自己相関
+	FILE *fp3;//ファイルポインタ　評価する特性3のファイルの書き込みに使用
+	
+//ファイル設定
+	fp1=fopen("kadai1.txt","w");//課題１のファイルを開く
+	if(fp1==NULL){//ファイルが開けないとき
+		printf("課題１のファイルをオープンできませんでした。\n");
+		return 1;
+	}else{
+	printf("課題１のファイルをオープンしました。\n");
+	}	
+
+
+
+//計算部
+	//評価する特性１ フェージング波形を作る
+	//printf("サンプリング数は%dです\n", d_number_max);   //サンプリング数を示すテスト用
+	//printf("%f\n",cabs(I*I));//
+	//printf("虚数単位の虚部は%f\t",cimag(I));//虚数単位のテスト
+	//printf("虚数単位の実部は%f\t",creal(I));//虚数単位のテスト
+
+
+	for(int i = 1; i <= N ; i++){ //それぞれの波における位相の初期設定
+		 phi[i]=rand()*2*PI/RAND_MAX;//波の位相はランダム
+	}
+
+	for (n = 0; n<d_number_max;n++){ //ループ3  ｄのサンプリング番号を0から最大値-1まで
+		d = delta_d* (double ) n;//Dはサンプリング番号とサンプリング間隔の積とする。
+		E[n]=0;//nにおいてEを０とする
+		P[n]=0;// ｎにおいて、Ewo０とする
+
+		for (int i = 1; i <= N ; i++) {//それぞれの波
+
+			theta=2*PI*(i-1)/N;//波が到来する角度をずらす。
+			//printf("n=%d\td=%f\ti=%d\ttheta= %f\tphi=%f\n",n,d,i,theta,phi[i]);//テスト用
+			//printf("この波の電界の実部は%f虚部は%fです\n",creal(I*(2*PI*d*cos(theta)/ramda+phi[i])),cimag(I*(2*PI*d*cos(theta)/ramda+phi[i])));//テスト用到来した電界の事物と虚部を見る
+			E[n]+=cexp(I*(2*PI*d*cos(theta) / ramda + phi[i]));//到来した一つの波を電界に加算する。
+		}
+		P[n]=cabs(E[n])*cabs(E[n]);//電界の２乗を求めて電力を求める。
+	//	printf("E[%d]の実部は%f\tE[%d]の虚部は%f\n",n,cimag(E[n]),n,creal(E[n]));//テスト用　電解の実部と虚部を表示
+	//	printf("P[%d]=%f\n",n,P[n]);// テスト用　電力の表示
+	
+		fprintf(fp1,"%f\t%f\n",d,P[n]);// 距離と、電力を課題１のファイル書き込む
+	}
+	fclose(fp1);//評価する特性１のファイルを閉じる
+	printf("評価する特性１のファイルをクローズしました。\n");
+
+
+	//評価する特性２  電力の大きさの累積確率
+	for(m=0;m<m_max;m++){//配列の初期化
+		PDF[m]=0;
+		CDF[m]=0;
+	}
+
+	max_log_Power=log(P[0]);
+	/*for(n=0;n<d_number_max;n++){//電力のログの最大値を求める。
+		 if(max_log_Power<log10(P[n])){//もし、設定した最大値がP[n]の対数より小さいなら、P[n]の対数を設定した最大値とする。
+			 max_log_Power=log10(P[n]);//
+		}
+		//printf("n=%dにおける電力のログは%f\n",n,max_log_Power);//テスト用
+	} */
+	//printf("電力の最大値のログは%fです。",max_log_Power);//テスト用
+	fp2=fopen("kadai2.txt","w");//課題１のファイルを開く
+	if(fp1==NULL){//ファイルが開けないとき
+		printf("評価する特性２のファイルをオープンできませんでした。\n");
+		return 1;
+	}else{
+	printf("評価する特性２のファイルをオープンしました。\n");
+		}	
+		//確立密度関数PDFを求める
+	for(n=0;n<d_number_max;n++){//ループ４ dに比例するn を調べる
+		m=log10(P[n])*10+10; //電力の常用対数に20を足す.(電力の真数の0.01から1を範囲とする。)（最大値でかけると、最大値が配列に格納できないので）。
+		//printf("電力P[%d]=%f\t常用対数は%fmの値は%d\n",n,P[n],log(P[n]),m);//テスト用
+		if(m>=0&&m<m_max){//mの値が正であり、m_maxより小さいとき
+	
+			PDF[m]+=(1/(double)d_number_max);//d_number_max（距離のサンプリングの総数）分の１を足す。
+			//printf("距離のサンプリングの総数の逆数は%fです。",1/(double)d_number_max);//テスト用
+			//PDF[m]+=1;//上の式がうまくいかなかったときに使う。、
+			//printf("nの値は%dmの値は%dPDFを加算した値は%fです。",n,m,1/d_number_max);//テスト用
+			//printf("n=%dのとき、PDF[%d]は%fです。",n,m,PDF[m]);//テスト用　確率が正常にでるか
+		}else{//mの値が負
+			printf("P{%d]=%fのとき、極めて小さな値もしくは、大きな値がが検出されました。これは、グラフにはのせません。\n",n,P[n]);//テスト用
+		}
+
+	}
+	CDF[0]=PDF[0];
+	for(m=1;m<m_max;m++){//PDFを積分してCDFをつくる。ただし、CDF[0]は前行で代入するので除く。
+		CDF[m]=CDF[m-1]+PDF[m];//一つ前のデータとPDFを足す。
+	//	printf("m=%dの確率は%fです。",m,PDF[m]);//テスト用、確立密度関数に比例したものを示す。
+		fprintf(fp2,"%d\t%f\n",m,CDF[m]);// 番号と累積確率を評価する特性２のファイルに書き込む
+
+	}
+	fclose(fp2);//評価する特性２のファイルを閉じる
+	printf("評価する特性２のファイルをクローズしました。\n");//評価する特性２のファイルのクローズ
+		
+	//評価する特性３　自己相関特性
+
+	fp3=fopen("kadai3.txt","w");//課題１のファイルを開く
+	if(fp1==NULL){//ファイルが開けないとき
+		printf("評価する特性3のファイルをオープンできませんでした。\n");
+		return 1;
+	}else{
+	printf("評価する特性3のファイルをオープンしました。\n");
+		}		
+	for(n=0;n<d_number_max;n++){//自己相関の初期化と電力の平均の算出
+		rho[n]=0;
+		average_P+=P[n];//合計をもとめる。	
+	}
+	average_P /=d_number_max;//合計をデータ数でで割り平均を求める。
+	//自己相関を求める２重ループ
+	for(l=0;l<d_number_max;l++){//ループ１	ずれた数
+		for(n=0;n<d_number_max;n++){ //ループ２　lだけずらす
+		//	if(l=10&&( n < 10 || n > d_number_max-10 ) ) {//テスト用
+		//	printf("%dから%dだけずれた番号は%dです。\n",n,l,(n+l)% d_number_max); //テスト用
+		//	}//テスト用
+			rho[l]+=(P[l]-average_P)*(P[(n+l)% d_number_max] - average_P) ;//(もとの関数-平均)と(lずれた関数-平均)の総和をとる
+		}
+//		rho[l]/=average_P;//平均でわる。
+		fprintf(fp3,"%f\t%f\n",l*delta_d,rho[n]);//ずれた距離と自己相関を評価する特性３のファイルに書き込む 
+	}
+	
+
+ 	fclose(fp3);//評価する特性3のファイルを閉じる
+	printf("評価する特性3のファイルをクローズしました。\n");//評価する特性3のファイルのクローズ
+
+
+
+
+//終了処理
+
+	return 0;
+}
+//kadai1() {
+//}
